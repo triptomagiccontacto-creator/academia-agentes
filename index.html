@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Academia de Agentes</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
 </head>
 <body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
     <div id="app"></div>
 
-    <script type="module">
+    <script>
         // Configuración de Supabase
         const SUPABASE_URL = 'https://rynoddtiaxbnyjspokpz.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ5bm9kZHRpYXhibnlqc3Bva3B6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNDkwNjcsImV4cCI6MjA4MDYyNTA2N30.4ioySNGorwcnayfYm5a5V-w9Jv99N3k8i5K_rZ-zf1E';
@@ -45,32 +45,65 @@
         }
 
         async function loadProfile(userId) {
-            const { data, error } = await supabaseClient
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .single();
-            
-            if (data) {
-                currentProfile = data;
-                if (data.role === 'admin') {
-                    currentView = 'admin';
-                } else if (!data.has_completed_welcome) {
-                    currentView = 'welcome';
-                } else if (!data.niche_id) {
-                    currentView = 'niche-selection';
-                } else {
-                    currentView = 'dashboard';
+            console.log('Cargando perfil para:', userId);
+            try {
+                const { data, error } = await supabaseClient
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', userId)
+                    .single();
+                
+                console.log('Perfil cargado:', { data, error });
+                
+                if (error) {
+                    console.error('Error al cargar perfil:', error);
+                    alert('Error al cargar perfil: ' + error.message);
+                    return;
                 }
+                
+                if (data) {
+                    currentProfile = data;
+                    if (data.role === 'admin') {
+                        currentView = 'admin';
+                    } else if (!data.has_completed_welcome) {
+                        currentView = 'welcome';
+                    } else if (!data.niche_id) {
+                        currentView = 'niche-selection';
+                    } else {
+                        currentView = 'dashboard';
+                    }
+                }
+            } catch (err) {
+                console.error('Error inesperado en loadProfile:', err);
+                alert('Error inesperado al cargar perfil: ' + err.message);
             }
         }
 
         async function handleLogin(email, password) {
-            const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-            if (error) {
-                alert('Error: ' + error.message);
-            } else {
-                await init();
+            console.log('Intentando login con:', email);
+            try {
+                const { data, error } = await supabaseClient.auth.signInWithPassword({ 
+                    email: email, 
+                    password: password 
+                });
+                
+                console.log('Respuesta de login:', { data, error });
+                
+                if (error) {
+                    alert('Error de inicio de sesión: ' + error.message);
+                    return;
+                }
+                
+                if (data.user) {
+                    currentUser = data.user;
+                    await loadProfile(data.user.id);
+                    render();
+                } else {
+                    alert('No se pudo obtener el usuario');
+                }
+            } catch (err) {
+                console.error('Error en handleLogin:', err);
+                alert('Error inesperado: ' + err.message);
             }
         }
 
@@ -439,7 +472,16 @@
             e.preventDefault();
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
-            handleLogin(email, password);
+            
+            // Mostrar indicador de carga
+            const button = e.target.querySelector('button[type="submit"]');
+            button.textContent = 'Iniciando sesión...';
+            button.disabled = true;
+            
+            handleLogin(email, password).finally(() => {
+                button.textContent = 'Iniciar Sesión';
+                button.disabled = false;
+            });
         };
 
         window.handleLogout = handleLogout;
