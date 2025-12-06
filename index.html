@@ -1,949 +1,467 @@
-import React, { useState, useEffect } from 'react';
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Academia de Agentes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+    <div id="app"></div>
 
-// Configuración de Supabase - REEMPLAZA CON TUS CREDENCIALES
-const SUPABASE_URL = 'https://rynoddtiaxbnyjspokpz.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ5bm9kZHRpYXhibnlqc3Bva3B6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNDkwNjcsImV4cCI6MjA4MDYyNTA2N30.4ioySNGorwcnayfYm5a5V-w9Jv99N3k8i5K_rZ-zf1E';
+    <script type="module">
+        // Configuración de Supabase
+        const SUPABASE_URL = 'https://rynoddtiaxbnyjspokpz.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ5bm9kZHRpYXhibnlqc3Bva3B6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNDkwNjcsImV4cCI6MjA4MDYyNTA2N30.4ioySNGorwcnayfYm5a5V-w9Jv99N3k8i5K_rZ-zf1E';
+        
+        const { createClient } = supabase;
+        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+        const NICHES = [
+            { id: 'parques-tematicos', name: 'PARQUES TEMÁTICOS' },
+            { id: 'playa-todo-incluido', name: 'PLAYA Y TODO INCLUIDO' },
+            { id: 'cruceros', name: 'CRUCEROS' },
+            { id: 'bodas-lunas-miel', name: 'BODAS Y LUNAS DE MIEL' },
+            { id: 'europa', name: 'EUROPA' },
+            { id: 'asia', name: 'ASIA' },
+            { id: 'viajes-deportivos', name: 'VIAJES DEPORTIVOS' },
+            { id: 'viajes-religiosos', name: 'VIAJES RELIGIOSOS' },
+            { id: 'aventura-ecoturismo', name: 'AVENTURA Y ECOTURISMO' },
+            { id: 'ski-montana', name: 'SKI Y MONTAÑA' }
+        ];
 
-// IDs de carpetas de Google Drive
-const FOLDERS = {
-  welcome: '15XQrekIA7EvGc2MQixfpZhIpkWrokbAk',
-  basics: '1PVq3BtjK2QrsEdw3qIrQaPeMKQ0b8oZJ',
-  general: '1xqnysivUmxamTlmHcbb-l9II4rkIqeXQ'
-};
+        let currentUser = null;
+        let currentProfile = null;
+        let currentView = 'login';
 
-const NICHES = [
-  { id: 'parques-tematicos', name: 'PARQUES TEMÁTICOS' },
-  { id: 'playa-todo-incluido', name: 'PLAYA Y TODO INCLUIDO' },
-  { id: 'cruceros', name: 'CRUCEROS' },
-  { id: 'bodas-lunas-miel', name: 'BODAS Y LUNAS DE MIEL' },
-  { id: 'europa', name: 'EUROPA' },
-  { id: 'asia', name: 'ASIA' },
-  { id: 'viajes-deportivos', name: 'VIAJES DEPORTIVOS' },
-  { id: 'viajes-religiosos', name: 'VIAJES RELIGIOSOS' },
-  { id: 'aventura-ecoturismo', name: 'AVENTURA Y ECOTURISMO' },
-  { id: 'ski-montana', name: 'SKI Y MONTAÑA' }
-];
+        async function init() {
+            const { data: { user } } = await supabaseClient.auth.getUser();
+            if (user) {
+                currentUser = user;
+                await loadProfile(user.id);
+            }
+            render();
+        }
 
-function App() {
-  const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [view, setView] = useState('login');
-
-  useEffect(() => {
-    checkUser();
-  }, []);
-
-  async function checkUser() {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUser(user);
-        await loadProfile(user.id);
-      }
-    } catch (error) {
-      console.error('Error checking user:', error);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadProfile(userId) {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-      
-      if (error) throw error;
-      setProfile(data);
-      
-      if (data.role === 'admin') {
-        setView('admin');
-      } else if (!data.has_completed_welcome) {
-        setView('welcome');
-      } else if (!data.niche_id) {
-        setView('niche-selection');
-      } else {
-        setView('dashboard');
-      }
-    } catch (error) {
-      console.error('Error loading profile:', error);
-    }
-  }
-
-  async function handleLogout() {
-    await supabase.auth.signOut();
-    setUser(null);
-    setProfile(null);
-    setView('login');
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-2xl text-indigo-600 font-semibold">Cargando...</div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <AuthView onAuthSuccess={checkUser} />;
-  }
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <nav className="bg-white shadow-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <h1 className="text-2xl font-bold text-indigo-600">Academia de Agentes</h1>
-            <div className="flex items-center gap-4">
-              <span className="text-gray-700">{profile?.email}</span>
-              <span className="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-sm font-medium">
-                {profile?.role === 'admin' ? 'Admin' : 'Agente'}
-              </span>
-              <button
-                onClick={handleLogout}
-                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
-              >
-                Cerrar Sesión
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      {view === 'welcome' && <WelcomeView profile={profile} onComplete={() => setView('niche-selection')} />}
-      {view === 'niche-selection' && <NicheSelectionView profile={profile} onComplete={() => setView('dashboard')} />}
-      {view === 'dashboard' && <DashboardView profile={profile} />}
-      {view === 'admin' && <AdminView profile={profile} />}
-    </div>
-  );
-}
-
-function AuthView({ onAuthSuccess }) {
-  const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  async function handleAuth(e) {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-
-    try {
-      if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-      }
-      onAuthSuccess();
-    } catch (error) {
-      setError(error.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-        <h2 className="text-3xl font-bold text-center text-indigo-600 mb-6">
-          Academia de Agentes
-        </h2>
-        <p className="text-center text-gray-600 mb-8">
-          Plataforma de capacitación para agentes de viajes
-        </p>
-
-        <form onSubmit={handleAuth} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Contraseña</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              required
-            />
-          </div>
-
-          {error && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">
-              {error}
-            </div>
-          )}
-    </div>
-  );
-}
-
-export default App;
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition disabled:opacity-50"
-          >
-            {loading ? 'Procesando...' : (isLogin ? 'Iniciar Sesión' : 'Registrarse')}
-          </button>
-        </form>
-
-        <button
-          onClick={() => setIsLogin(!isLogin)}
-          className="w-full mt-4 text-indigo-600 hover:text-indigo-700 text-sm font-medium"
-        >
-          {isLogin ? '¿No tienes cuenta? Regístrate' : '¿Ya tienes cuenta? Inicia sesión'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function WelcomeView({ profile, onComplete }) {
-  const [videos, setVideos] = useState([]);
-  const [currentVideo, setCurrentVideo] = useState(null);
-  const [progress, setProgress] = useState({});
-
-  useEffect(() => {
-    loadWelcomeVideos();
-  }, []);
-
-  async function loadWelcomeVideos() {
-    try {
-      const { data, error } = await supabase
-        .from('videos')
-        .select('*')
-        .eq('folder_type', 'welcome')
-        .order('order_index');
-      
-      if (error) throw error;
-      setVideos(data);
-      if (data.length > 0) setCurrentVideo(data[0]);
-      await loadProgress();
-    } catch (error) {
-      console.error('Error loading videos:', error);
-    }
-  }
-
-  async function loadProgress() {
-    try {
-      const { data, error } = await supabase
-        .from('video_progress')
-        .select('*')
-        .eq('user_id', profile.id);
-      
-      if (error) throw error;
-      const progressMap = {};
-      data.forEach(p => {
-        progressMap[p.video_id] = p;
-      });
-      setProgress(progressMap);
-    } catch (error) {
-      console.error('Error loading progress:', error);
-    }
-  }
-
-  async function markAsCompleted(videoId) {
-    try {
-      const { error } = await supabase
-        .from('video_progress')
-        .upsert({
-          user_id: profile.id,
-          video_id: videoId,
-          progress_percent: 100,
-          completed: true
-        });
-      
-      if (error) throw error;
-      await loadProgress();
-      
-      const currentIndex = videos.findIndex(v => v.id === videoId);
-      if (currentIndex < videos.length - 1) {
-        setCurrentVideo(videos[currentIndex + 1]);
-      } else {
-        await supabase
-          .from('profiles')
-          .update({ has_completed_welcome: true })
-          .eq('id', profile.id);
-        onComplete();
-      }
-    } catch (error) {
-      console.error('Error marking as completed:', error);
-    }
-  }
-
-  const allCompleted = videos.every(v => progress[v.id]?.completed);
-
-  return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
-        <h2 className="text-3xl font-bold text-indigo-600 mb-4">¡Bienvenido!</h2>
-        <p className="text-gray-600 mb-6">
-          Completa estos videos de bienvenida para comenzar tu capacitación.
-        </p>
-
-        {currentVideo && (
-          <div className="mb-6">
-            <div className="aspect-video bg-gray-900 rounded-lg mb-4 overflow-hidden">
-              <iframe
-                src={`https://drive.google.com/file/d/${currentVideo.drive_file_id}/preview`}
-                className="w-full h-full"
-                allow="autoplay"
-              />
-            </div>
-            <h3 className="text-xl font-semibold mb-2">{currentVideo.title}</h3>
-            <p className="text-gray-600 mb-4">{currentVideo.description}</p>
+        async function loadProfile(userId) {
+            const { data, error } = await supabaseClient
+                .from('profiles')
+                .select('*')
+                .eq('id', userId)
+                .single();
             
-            {!progress[currentVideo.id]?.completed && (
-              <button
-                onClick={() => markAsCompleted(currentVideo.id)}
-                className="px-6 py-3 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition"
-              >
-                Marcar como completado y continuar
-              </button>
-            )}
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {videos.map((video, index) => (
-            <div
-              key={video.id}
-              onClick={() => {
-                if (index === 0 || progress[videos[index - 1].id]?.completed) {
-                  setCurrentVideo(video);
+            if (data) {
+                currentProfile = data;
+                if (data.role === 'admin') {
+                    currentView = 'admin';
+                } else if (!data.has_completed_welcome) {
+                    currentView = 'welcome';
+                } else if (!data.niche_id) {
+                    currentView = 'niche-selection';
+                } else {
+                    currentView = 'dashboard';
                 }
-              }}
-              className={`p-4 border-2 rounded-lg cursor-pointer transition ${
-                currentVideo?.id === video.id
-                  ? 'border-indigo-500 bg-indigo-50'
-                  : progress[video.id]?.completed
-                  ? 'border-green-500 bg-green-50'
-                  : index > 0 && !progress[videos[index - 1].id]?.completed
-                  ? 'border-gray-300 bg-gray-100 opacity-50 cursor-not-allowed'
-                  : 'border-gray-300 hover:border-indigo-300'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-medium">{video.title}</span>
-                {progress[video.id]?.completed && (
-                  <span className="text-green-500 text-xl">✓</span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+            }
+        }
 
-        {allCompleted && (
-          <button
-            onClick={onComplete}
-            className="mt-6 w-full px-6 py-4 bg-indigo-600 text-white rounded-lg font-semibold text-lg hover:bg-indigo-700 transition"
-          >
-            Continuar a selección de nicho →
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
+        async function handleLogin(email, password) {
+            const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+            if (error) {
+                alert('Error: ' + error.message);
+            } else {
+                await init();
+            }
+        }
 
-function NicheSelectionView({ profile, onComplete }) {
-  const [selectedNiche, setSelectedNiche] = useState('');
-  const [loading, setLoading] = useState(false);
+        async function handleLogout() {
+            await supabaseClient.auth.signOut();
+            currentUser = null;
+            currentProfile = null;
+            currentView = 'login';
+            render();
+        }
 
-  async function handleSubmit() {
-    if (!selectedNiche) return;
-    setLoading(true);
+        async function updateNiche(nicheId) {
+            const { error } = await supabaseClient
+                .from('profiles')
+                .update({ niche_id: nicheId })
+                .eq('id', currentProfile.id);
+            
+            if (!error) {
+                currentProfile.niche_id = nicheId;
+                currentView = 'dashboard';
+                render();
+            }
+        }
 
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ niche_id: selectedNiche })
-        .eq('id', profile.id);
-      
-      if (error) throw error;
-      onComplete();
-    } catch (error) {
-      console.error('Error updating niche:', error);
-    } finally {
-      setLoading(false);
-    }
-  }
+        function render() {
+            const app = document.getElementById('app');
+            
+            if (!currentUser) {
+                app.innerHTML = renderLogin();
+            } else if (currentView === 'niche-selection') {
+                app.innerHTML = renderNicheSelection();
+            } else if (currentView === 'admin') {
+                app.innerHTML = renderAdmin();
+            } else if (currentView === 'dashboard') {
+                app.innerHTML = renderDashboard();
+            } else if (currentView === 'welcome') {
+                app.innerHTML = renderWelcome();
+            }
+        }
 
-  return (
-    <div className="max-w-4xl mx-auto p-6">
-      <div className="bg-white rounded-2xl shadow-xl p-8">
-        <h2 className="text-3xl font-bold text-indigo-600 mb-4">Selecciona tu Nicho</h2>
-        <p className="text-gray-600 mb-8">
-          Elige el nicho de viajes en el que te especializarás. Esto determinará qué contenido de capacitación verás.
-        </p>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          {NICHES.map(niche => (
-            <button
-              key={niche.id}
-              onClick={() => setSelectedNiche(niche.id)}
-              className={`p-6 border-2 rounded-xl text-left transition ${
-                selectedNiche === niche.id
-                  ? 'border-indigo-500 bg-indigo-50'
-                  : 'border-gray-300 hover:border-indigo-300'
-              }`}
-            >
-              <h3 className="font-semibold text-lg">{niche.name}</h3>
-            </button>
-          ))}
-        </div>
-
-        <button
-          onClick={handleSubmit}
-          disabled={!selectedNiche || loading}
-          className="w-full px-6 py-4 bg-indigo-600 text-white rounded-lg font-semibold text-lg hover:bg-indigo-700 transition disabled:opacity-50"
-        >
-          {loading ? 'Guardando...' : 'Continuar →'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function DashboardView({ profile }) {
-  const [videos, setVideos] = useState([]);
-  const [currentVideo, setCurrentVideo] = useState(null);
-  const [progress, setProgress] = useState({});
-  const [comments, setComments] = useState([]);
-  const [newComment, setNewComment] = useState('');
-  const [filter, setFilter] = useState('basics');
-
-  useEffect(() => {
-    loadVideos();
-  }, [filter]);
-
-  useEffect(() => {
-    if (currentVideo) {
-      loadComments(currentVideo.id);
-    }
-  }, [currentVideo]);
-
-  async function loadVideos() {
-    try {
-      let query = supabase
-        .from('videos')
-        .select('*')
-        .order('order_index');
-
-      if (filter === 'basics') {
-        query = query.eq('folder_type', 'basics');
-      } else if (filter === 'niche') {
-        query = query.eq('folder_type', 'niche').eq('niche_id', profile.niche_id);
-      } else if (filter === 'general') {
-        query = query.eq('folder_type', 'general');
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      setVideos(data);
-      if (data.length > 0 && !currentVideo) setCurrentVideo(data[0]);
-      await loadProgress();
-    } catch (error) {
-      console.error('Error loading videos:', error);
-    }
-  }
-
-  async function loadProgress() {
-    try {
-      const { data, error } = await supabase
-        .from('video_progress')
-        .select('*')
-        .eq('user_id', profile.id);
-      
-      if (error) throw error;
-      const progressMap = {};
-      data.forEach(p => {
-        progressMap[p.video_id] = p;
-      });
-      setProgress(progressMap);
-    } catch (error) {
-      console.error('Error loading progress:', error);
-    }
-  }
-
-  async function loadComments(videoId) {
-    try {
-      const { data, error } = await supabase
-        .from('comments')
-        .select(`
-          *,
-          profiles:user_id (email, role)
-        `)
-        .eq('video_id', videoId)
-        .is('parent_id', null)
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      setComments(data);
-    } catch (error) {
-      console.error('Error loading comments:', error);
-    }
-  }
-
-  async function handleAddComment() {
-    if (!newComment.trim() || !currentVideo) return;
-
-    try {
-      const { error } = await supabase
-        .from('comments')
-        .insert({
-          video_id: currentVideo.id,
-          user_id: profile.id,
-          content: newComment
-        });
-      
-      if (error) throw error;
-      setNewComment('');
-      await loadComments(currentVideo.id);
-    } catch (error) {
-      console.error('Error adding comment:', error);
-    }
-  }
-
-  async function markAsCompleted(videoId) {
-    try {
-      const { error } = await supabase
-        .from('video_progress')
-        .upsert({
-          user_id: profile.id,
-          video_id: videoId,
-          progress_percent: 100,
-          completed: true
-        });
-      
-      if (error) throw error;
-      await loadProgress();
-      
-      const currentIndex = videos.findIndex(v => v.id === videoId);
-      if (currentIndex < videos.length - 1) {
-        setCurrentVideo(videos[currentIndex + 1]);
-      }
-    } catch (error) {
-      console.error('Error marking as completed:', error);
-    }
-  }
-
-  const niche = NICHES.find(n => n.id === profile.niche_id);
-
-  return (
-    <div className="max-w-7xl mx-auto p-6">
-      <div className="mb-6 flex gap-4">
-        <button
-          onClick={() => setFilter('basics')}
-          className={`px-6 py-3 rounded-lg font-semibold transition ${
-            filter === 'basics'
-              ? 'bg-indigo-600 text-white'
-              : 'bg-white text-gray-700 hover:bg-gray-100'
-          }`}
-        >
-          Básico para empezar
-        </button>
-        <button
-          onClick={() => setFilter('niche')}
-          className={`px-6 py-3 rounded-lg font-semibold transition ${
-            filter === 'niche'
-              ? 'bg-indigo-600 text-white'
-              : 'bg-white text-gray-700 hover:bg-gray-100'
-          }`}
-        >
-          Mi Nicho: {niche?.name}
-        </button>
-        <button
-          onClick={() => setFilter('general')}
-          className={`px-6 py-3 rounded-lg font-semibold transition ${
-            filter === 'general'
-              ? 'bg-indigo-600 text-white'
-              : 'bg-white text-gray-700 hover:bg-gray-100'
-          }`}
-        >
-          General
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <div className="bg-white rounded-2xl shadow-xl p-6">
-            {currentVideo && (
-              <>
-                <div className="aspect-video bg-gray-900 rounded-lg mb-4 overflow-hidden">
-                  <iframe
-                    src={`https://drive.google.com/file/d/${currentVideo.drive_file_id}/preview`}
-                    className="w-full h-full"
-                    allow="autoplay"
-                  />
-                </div>
-                <h2 className="text-2xl font-bold mb-2">{currentVideo.title}</h2>
-                <p className="text-gray-600 mb-4">{currentVideo.description}</p>
-                
-                {!progress[currentVideo.id]?.completed && (
-                  <button
-                    onClick={() => markAsCompleted(currentVideo.id)}
-                    className="mb-6 px-6 py-3 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition"
-                  >
-                    Marcar como completado
-                  </button>
-                )}
-
-                <div className="mt-8 border-t pt-6">
-                  <h3 className="text-xl font-bold mb-4">Comentarios</h3>
-                  
-                  <div className="mb-6">
-                    <textarea
-                      value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
-                      placeholder="Escribe tu comentario o pregunta..."
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
-                      rows="3"
-                    />
-                    <button
-                      onClick={handleAddComment}
-                      className="mt-2 px-6 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition"
-                    >
-                      Comentar
-                    </button>
-                  </div>
-
-                  <div className="space-y-4">
-                    {comments.map(comment => (
-                      <div key={comment.id} className="bg-gray-50 p-4 rounded-lg">
-                        <div className="flex items-start justify-between mb-2">
-                          <span className="font-medium text-gray-900">{comment.profiles.email}</span>
-                          <span className="text-sm text-gray-500">
-                            {new Date(comment.created_at).toLocaleDateString()}
-                          </span>
-                        </div>
-                        <p className="text-gray-700">{comment.content}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-xl p-6">
-          <h3 className="text-xl font-bold mb-4">Lista de Videos</h3>
-          <div className="space-y-2">
-            {videos.map((video, index) => {
-              const isLocked = index > 0 && !progress[videos[index - 1].id]?.completed;
-              return (
-                <button
-                  key={video.id}
-                  onClick={() => !isLocked && setCurrentVideo(video)}
-                  disabled={isLocked}
-                  className={`w-full p-4 text-left rounded-lg transition ${
-                    currentVideo?.id === video.id
-                      ? 'bg-indigo-100 border-2 border-indigo-500'
-                      : progress[video.id]?.completed
-                      ? 'bg-green-50 border-2 border-green-500'
-                      : isLocked
-                      ? 'bg-gray-100 opacity-50 cursor-not-allowed'
-                      : 'bg-gray-50 hover:bg-gray-100'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">{video.title}</span>
-                    {progress[video.id]?.completed ? (
-                      <span className="text-green-500 text-xl">✓</span>
-                    ) : isLocked ? (
-                      <span className="text-gray-400 text-xl">🔒</span>
-                    ) : null}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AdminView({ profile }) {
-  const [view, setView] = useState('users');
-  const [users, setUsers] = useState([]);
-  const [videos, setVideos] = useState([]);
-  const [newVideo, setNewVideo] = useState({
-    title: '',
-    description: '',
-    drive_file_id: '',
-    folder_type: 'welcome',
-    niche_id: '',
-    order_index: 1
-  });
-
-  useEffect(() => {
-    if (view === 'users') loadUsers();
-    if (view === 'videos') loadVideos();
-  }, [view]);
-
-  async function loadUsers() {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      setUsers(data);
-    } catch (error) {
-      console.error('Error loading users:', error);
-    }
-  }
-
-  async function loadVideos() {
-    try {
-      const { data, error } = await supabase
-        .from('videos')
-        .select('*')
-        .order('order_index');
-      
-      if (error) throw error;
-      setVideos(data);
-    } catch (error) {
-      console.error('Error loading videos:', error);
-    }
-  }
-
-  async function handleAddVideo() {
-    try {
-      const { error } = await supabase
-        .from('videos')
-        .insert(newVideo);
-      
-      if (error) throw error;
-      setNewVideo({
-        title: '',
-        description: '',
-        drive_file_id: '',
-        folder_type: 'welcome',
-        niche_id: '',
-        order_index: 1
-      });
-      await loadVideos();
-    } catch (error) {
-      console.error('Error adding video:', error);
-    }
-  }
-
-  async function handleDeleteVideo(id) {
-    if (!confirm('¿Estás seguro de eliminar este video?')) return;
-    
-    try {
-      const { error } = await supabase
-        .from('videos')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
-      await loadVideos();
-    } catch (error) {
-      console.error('Error deleting video:', error);
-    }
-  }
-
-  return (
-    <div className="max-w-7xl mx-auto p-6">
-      <div className="mb-6 flex gap-4">
-        <button
-          onClick={() => setView('users')}
-          className={`px-6 py-3 rounded-lg font-semibold transition ${
-            view === 'users'
-              ? 'bg-indigo-600 text-white'
-              : 'bg-white text-gray-700 hover:bg-gray-100'
-          }`}
-        >
-          Usuarios
-        </button>
-        <button
-          onClick={() => setView('videos')}
-          className={`px-6 py-3 rounded-lg font-semibold transition ${
-            view === 'videos'
-              ? 'bg-indigo-600 text-white'
-              : 'bg-white text-gray-700 hover:bg-gray-100'
-          }`}
-        >
-          Videos
-        </button>
-      </div>
-
-      {view === 'users' && (
-        <div className="bg-white rounded-2xl shadow-xl p-6">
-          <h2 className="text-2xl font-bold mb-6">Gestión de Usuarios</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left p-4">Email</th>
-                  <th className="text-left p-4">Rol</th>
-                  <th className="text-left p-4">Nicho</th>
-                  <th className="text-left p-4">Bienvenida</th>
-                  <th className="text-left p-4">Fecha</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map(user => {
-                  const niche = NICHES.find(n => n.id === user.niche_id);
-                  return (
-                    <tr key={user.id} className="border-b hover:bg-gray-50">
-                      <td className="p-4">{user.email}</td>
-                      <td className="p-4">
-                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                          user.role === 'admin' 
-                            ? 'bg-purple-100 text-purple-800' 
-                            : 'bg-blue-100 text-blue-800'
-                        }`}>
-                          {user.role}
-                        </span>
-                      </td>
-                      <td className="p-4">{niche?.name || 'Sin asignar'}</td>
-                      <td className="p-4">
-                        {user.has_completed_welcome ? '✓ Completada' : '⏳ Pendiente'}
-                      </td>
-                      <td className="p-4 text-sm text-gray-500">
-                        {new Date(user.created_at).toLocaleDateString()}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {view === 'videos' && (
-        <div className="space-y-6">
-          <div className="bg-white rounded-2xl shadow-xl p-6">
-            <h2 className="text-2xl font-bold mb-6">Agregar Nuevo Video</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Título</label>
-                <input
-                  type="text"
-                  value={newVideo.title}
-                  onChange={(e) => setNewVideo({...newVideo, title: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">ID del archivo de Drive</label>
-                <input
-                  type="text"
-                  value={newVideo.drive_file_id}
-                  onChange={(e) => setNewVideo({...newVideo, drive_file_id: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Ej: 1a2B3c4D5e6F7g8H9i0J"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de carpeta</label>
-                <select
-                  value={newVideo.folder_type}
-                  onChange={(e) => setNewVideo({...newVideo, folder_type: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="welcome">Bienvenida</option>
-                  <option value="basics">Básico para empezar</option>
-                  <option value="niche">Nicho específico</option>
-                  <option value="general">General (todos)</option>
-                </select>
-              </div>
-              {newVideo.folder_type === 'niche' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Nicho</label>
-                  <select
-                    value={newVideo.niche_id}
-                    onChange={(e) => setNewVideo({...newVideo, niche_id: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">Seleccionar...</option>
-                    {NICHES.map(niche => (
-                      <option key={niche.id} value={niche.id}>{niche.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Orden</label>
-                <input
-                  type="number"
-                  value={newVideo.order_index}
-                  onChange={(e) => setNewVideo({...newVideo, order_index: parseInt(e.target.value)})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-            </div>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Descripción</label>
-              <textarea
-                value={newVideo.description}
-                onChange={(e) => setNewVideo({...newVideo, description: e.target.value})}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 resize-none"
-                rows="3"
-              />
-            </div>
-            <button
-              onClick={handleAddVideo}
-              className="px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition"
-            >
-              Agregar Video
-            </button>
-          </div>
-
-          <div className="bg-white rounded-2xl shadow-xl p-6">
-            <h2 className="text-2xl font-bold mb-6">Videos Existentes</h2>
-            <div className="space-y-4">
-              {videos.map(video => {
-                const niche = NICHES.find(n => n.id === video.niche_id);
-                return (
-                  <div key={video.id} className="border rounded-lg p-4 hover:bg-gray-50">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-lg">{video.title}</h3>
-                        <p className="text-gray-600 text-sm mb-2">{video.description}</p>
-                        <div className="flex gap-4 text-sm text-gray-500">
-                          <span>Tipo: <span className="font-medium">{video.folder_type}</span></span>
-                          {video.niche_id && <span>Nicho: <span className="font-medium">{niche?.name}</span></span>}
-                          <span>Orden: <span className="font-medium">{video.order_index}</span></span>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleDeleteVideo(video.id)}
-                        className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition text-sm"
-                      >
-                        Eliminar
-                      </button>
+        function renderLogin() {
+            return `
+                <div class="min-h-screen flex items-center justify-center p-4">
+                    <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+                        <h2 class="text-3xl font-bold text-center text-indigo-600 mb-6">Academia de Agentes</h2>
+                        <p class="text-center text-gray-600 mb-8">Plataforma de capacitación para agentes de viajes</p>
+                        
+                        <form onsubmit="handleLoginSubmit(event)" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                                <input 
+                                    type="email" 
+                                    id="email" 
+                                    required
+                                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Contraseña</label>
+                                <input 
+                                    type="password" 
+                                    id="password" 
+                                    required
+                                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                />
+                            </div>
+                            <button 
+                                type="submit"
+                                class="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition"
+                            >
+                                Iniciar Sesión
+                            </button>
+                        </form>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+                </div>
+            `;
+        }
+
+        function renderNicheSelection() {
+            const nichesHTML = NICHES.map(niche => `
+                <button 
+                    onclick="selectNiche('${niche.id}')"
+                    class="p-6 border-2 border-gray-300 rounded-xl text-left hover:border-indigo-500 hover:bg-indigo-50 transition"
+                >
+                    <h3 class="font-semibold text-lg">${niche.name}</h3>
+                </button>
+            `).join('');
+
+            return `
+                <nav class="bg-white shadow-md mb-6">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div class="flex justify-between items-center h-16">
+                            <h1 class="text-2xl font-bold text-indigo-600">Academia de Agentes</h1>
+                            <div class="flex items-center gap-4">
+                                <span class="text-gray-700">${currentProfile?.email}</span>
+                                <button onclick="handleLogout()" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition">
+                                    Cerrar Sesión
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+                <div class="max-w-4xl mx-auto p-6">
+                    <div class="bg-white rounded-2xl shadow-xl p-8">
+                        <h2 class="text-3xl font-bold text-indigo-600 mb-4">Selecciona tu Nicho</h2>
+                        <p class="text-gray-600 mb-8">Elige el nicho de viajes en el que te especializarás.</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            ${nichesHTML}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderWelcome() {
+            return `
+                <nav class="bg-white shadow-md mb-6">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div class="flex justify-between items-center h-16">
+                            <h1 class="text-2xl font-bold text-indigo-600">Academia de Agentes</h1>
+                            <button onclick="handleLogout()" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition">
+                                Cerrar Sesión
+                            </button>
+                        </div>
+                    </div>
+                </nav>
+                <div class="max-w-6xl mx-auto p-6">
+                    <div class="bg-white rounded-2xl shadow-xl p-8">
+                        <h2 class="text-3xl font-bold text-indigo-600 mb-4">¡Bienvenido!</h2>
+                        <p class="text-gray-600 mb-6">Por favor, sube videos de bienvenida desde el panel de administrador para que los agentes puedan verlos.</p>
+                        <button 
+                            onclick="completeWelcome()"
+                            class="px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition"
+                        >
+                            Continuar a selección de nicho →
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderDashboard() {
+            const niche = NICHES.find(n => n.id === currentProfile.niche_id);
+            return `
+                <nav class="bg-white shadow-md mb-6">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div class="flex justify-between items-center h-16">
+                            <h1 class="text-2xl font-bold text-indigo-600">Academia de Agentes</h1>
+                            <div class="flex items-center gap-4">
+                                <span class="text-gray-700">${currentProfile?.email}</span>
+                                <span class="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-sm font-medium">Agente</span>
+                                <button onclick="handleLogout()" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition">
+                                    Cerrar Sesión
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+                <div class="max-w-7xl mx-auto p-6">
+                    <div class="bg-white rounded-2xl shadow-xl p-8 mb-6">
+                        <h2 class="text-2xl font-bold mb-4">Mi Nicho: ${niche?.name}</h2>
+                        <p class="text-gray-600 mb-4">Tus videos de capacitación aparecerán aquí una vez que el administrador los suba.</p>
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <p class="text-blue-800">📹 El administrador debe agregar videos desde el panel de administración.</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderAdmin() {
+            return `
+                <nav class="bg-white shadow-md mb-6">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div class="flex justify-between items-center h-16">
+                            <h1 class="text-2xl font-bold text-indigo-600">Academia de Agentes</h1>
+                            <div class="flex items-center gap-4">
+                                <span class="text-gray-700">${currentProfile?.email}</span>
+                                <span class="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-medium">Admin</span>
+                                <button onclick="handleLogout()" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition">
+                                    Cerrar Sesión
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+                <div class="max-w-7xl mx-auto p-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        <button onclick="showAdminView('users')" class="p-6 bg-white rounded-xl shadow-lg hover:shadow-xl transition">
+                            <h3 class="text-xl font-bold text-indigo-600 mb-2">👥 Gestión de Usuarios</h3>
+                            <p class="text-gray-600">Ver y administrar todos los usuarios registrados</p>
+                        </button>
+                        <button onclick="showAdminView('videos')" class="p-6 bg-white rounded-xl shadow-lg hover:shadow-xl transition">
+                            <h3 class="text-xl font-bold text-indigo-600 mb-2">🎬 Gestión de Videos</h3>
+                            <p class="text-gray-600">Agregar y administrar videos de capacitación</p>
+                        </button>
+                    </div>
+                    <div id="admin-content" class="bg-white rounded-2xl shadow-xl p-8">
+                        <h2 class="text-2xl font-bold text-gray-700 mb-4">Panel de Administración</h2>
+                        <p class="text-gray-600">Selecciona una opción arriba para comenzar.</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function showAdminView(view) {
+            const content = document.getElementById('admin-content');
+            if (view === 'users') {
+                const { data: users } = await supabaseClient
+                    .from('profiles')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+                
+                const usersHTML = users.map(user => {
+                    const niche = NICHES.find(n => n.id === user.niche_id);
+                    return `
+                        <tr class="border-b hover:bg-gray-50">
+                            <td class="p-4">${user.email}</td>
+                            <td class="p-4">
+                                <span class="px-3 py-1 rounded-full text-sm font-medium ${user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}">
+                                    ${user.role}
+                                </span>
+                            </td>
+                            <td class="p-4">${niche?.name || 'Sin asignar'}</td>
+                            <td class="p-4">${user.has_completed_welcome ? '✓ Completada' : '⏳ Pendiente'}</td>
+                            <td class="p-4 text-sm text-gray-500">${new Date(user.created_at).toLocaleDateString()}</td>
+                        </tr>
+                    `;
+                }).join('');
+
+                content.innerHTML = `
+                    <h2 class="text-2xl font-bold mb-6">Gestión de Usuarios</h2>
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="border-b-2">
+                                    <th class="text-left p-4">Email</th>
+                                    <th class="text-left p-4">Rol</th>
+                                    <th class="text-left p-4">Nicho</th>
+                                    <th class="text-left p-4">Bienvenida</th>
+                                    <th class="text-left p-4">Fecha</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${usersHTML}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            } else if (view === 'videos') {
+                const { data: videos } = await supabaseClient
+                    .from('videos')
+                    .select('*')
+                    .order('order_index');
+
+                const videosHTML = videos ? videos.map(video => {
+                    const niche = NICHES.find(n => n.id === video.niche_id);
+                    return `
+                        <div class="border rounded-lg p-4 hover:bg-gray-50">
+                            <div class="flex justify-between items-start">
+                                <div class="flex-1">
+                                    <h3 class="font-semibold text-lg">${video.title}</h3>
+                                    <p class="text-gray-600 text-sm mb-2">${video.description || 'Sin descripción'}</p>
+                                    <div class="flex gap-4 text-sm text-gray-500">
+                                        <span>Tipo: <span class="font-medium">${video.folder_type}</span></span>
+                                        ${video.niche_id ? `<span>Nicho: <span class="font-medium">${niche?.name}</span></span>` : ''}
+                                        <span>Orden: <span class="font-medium">${video.order_index}</span></span>
+                                    </div>
+                                </div>
+                                <button onclick="deleteVideo('${video.id}')" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition text-sm">
+                                    Eliminar
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }).join('') : '<p class="text-gray-500">No hay videos agregados aún.</p>';
+
+                const nichesOptions = NICHES.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
+
+                content.innerHTML = `
+                    <h2 class="text-2xl font-bold mb-6">Agregar Nuevo Video</h2>
+                    <form onsubmit="handleAddVideo(event)" class="mb-8 space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Título</label>
+                                <input type="text" id="video-title" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">ID del archivo de Drive</label>
+                                <input type="text" id="video-drive-id" required placeholder="Ej: 1a2B3c4D5e6F7g8H9i0J" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Tipo de carpeta</label>
+                                <select id="video-folder-type" onchange="toggleNicheField()" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                                    <option value="welcome">Bienvenida</option>
+                                    <option value="basics">Básico para empezar</option>
+                                    <option value="niche">Nicho específico</option>
+                                    <option value="general">General (todos)</option>
+                                </select>
+                            </div>
+                            <div id="niche-field" style="display: none;">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Nicho</label>
+                                <select id="video-niche" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                                    <option value="">Seleccionar...</option>
+                                    ${nichesOptions}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Orden</label>
+                                <input type="number" id="video-order" value="1" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" />
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Descripción</label>
+                            <textarea id="video-description" rows="3" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 resize-none"></textarea>
+                        </div>
+                        <button type="submit" class="px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition">
+                            Agregar Video
+                        </button>
+                    </form>
+
+                    <h2 class="text-2xl font-bold mb-6">Videos Existentes</h2>
+                    <div class="space-y-4">
+                        ${videosHTML}
+                    </div>
+                `;
+            }
+        }
+
+        window.toggleNicheField = function() {
+            const folderType = document.getElementById('video-folder-type').value;
+            const nicheField = document.getElementById('niche-field');
+            nicheField.style.display = folderType === 'niche' ? 'block' : 'none';
+        };
+
+        window.handleAddVideo = async function(e) {
+            e.preventDefault();
+            const video = {
+                title: document.getElementById('video-title').value,
+                description: document.getElementById('video-description').value,
+                drive_file_id: document.getElementById('video-drive-id').value,
+                folder_type: document.getElementById('video-folder-type').value,
+                order_index: parseInt(document.getElementById('video-order').value),
+                niche_id: document.getElementById('video-niche')?.value || null
+            };
+
+            const { error } = await supabaseClient.from('videos').insert(video);
+            if (error) {
+                alert('Error: ' + error.message);
+            } else {
+                alert('Video agregado exitosamente');
+                showAdminView('videos');
+            }
+        };
+
+        window.deleteVideo = async function(id) {
+            if (!confirm('¿Estás seguro de eliminar este video?')) return;
+            const { error } = await supabaseClient.from('videos').delete().eq('id', id);
+            if (!error) {
+                alert('Video eliminado');
+                showAdminView('videos');
+            }
+        };
+
+        window.handleLoginSubmit = function(e) {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            handleLogin(email, password);
+        };
+
+        window.handleLogout = handleLogout;
+        
+        window.selectNiche = function(nicheId) {
+            updateNiche(nicheId);
+        };
+
+        window.completeWelcome = async function() {
+            await supabaseClient
+                .from('profiles')
+                .update({ has_completed_welcome: true })
+                .eq('id', currentProfile.id);
+            currentProfile.has_completed_welcome = true;
+            currentView = 'niche-selection';
+            render();
+        };
+
+        window.showAdminView = showAdminView;
+
+        // Iniciar la aplicación
+        init();
+    </script>
+</body>
+</html>
