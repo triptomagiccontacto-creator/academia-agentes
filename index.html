@@ -6,8 +6,22 @@
     <title>Academia de Agentes - Plataforma</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#063573',
+                        secondary: '#2594D9',
+                        accent: '#F2C4C8',
+                        highlight: '#F2D479'
+                    }
+                }
+            }
+        }
+    </script>
 </head>
-<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+<body class="bg-gradient-to-br from-blue-50 via-white to-pink-50 min-h-screen">
     <div id="app"></div>
 
     <script>
@@ -32,6 +46,7 @@
         let currentUser = null;
         let currentProfile = null;
         let currentView = 'login';
+        let viewAsAgent = false;
 
         async function init() {
             try {
@@ -58,7 +73,12 @@
                 
                 if (data) {
                     currentProfile = data;
-                    if (data.role === 'admin') {
+                    
+                    if (viewAsAgent && data.role === 'admin') {
+                        if (!data.has_completed_welcome) currentView = 'welcome';
+                        else if (!data.niche_id) currentView = 'niche-selection';
+                        else currentView = 'dashboard';
+                    } else if (data.role === 'admin') {
                         currentView = 'admin';
                     } else if (!data.has_completed_welcome) {
                         currentView = 'welcome';
@@ -70,27 +90,21 @@
                 }
             } catch (error) {
                 console.error('Error loading profile:', error);
-                alert('Error al cargar perfil. Por favor recarga la página.');
+                alert('Error al cargar perfil');
             }
         }
 
         async function handleLogin(email, password) {
             try {
-                const { data, error } = await supabaseClient.auth.signInWithPassword({ 
-                    email: email, 
-                    password: password 
-                });
-                
+                const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
                 if (error) throw error;
-                
                 if (data.user) {
                     currentUser = data.user;
                     await loadProfile(data.user.id);
                     render();
                 }
             } catch (err) {
-                console.error('Error en login:', err);
-                alert('Error de inicio de sesión: ' + err.message);
+                alert('Error: ' + err.message);
             }
         }
 
@@ -99,25 +113,67 @@
             currentUser = null;
             currentProfile = null;
             currentView = 'login';
+            viewAsAgent = false;
             render();
         }
 
-        async function updateNiche(nicheId) {
-            try {
-                const { error } = await supabaseClient
-                    .from('profiles')
-                    .update({ niche_id: nicheId })
-                    .eq('id', currentProfile.id);
-                
-                if (error) throw error;
-                
-                currentProfile.niche_id = nicheId;
+        function goToHome() {
+            viewAsAgent = false;
+            if (currentProfile.role === 'admin') {
+                currentView = 'admin';
+            } else {
                 currentView = 'dashboard';
-                render();
-            } catch (error) {
-                console.error('Error updating niche:', error);
-                alert('Error al actualizar nicho');
             }
+            render();
+        }
+
+        function toggleViewAsAgent() {
+            viewAsAgent = !viewAsAgent;
+            if (viewAsAgent) {
+                if (!currentProfile.has_completed_welcome) currentView = 'welcome';
+                else if (!currentProfile.niche_id) currentView = 'niche-selection';
+                else currentView = 'dashboard';
+            } else {
+                currentView = 'admin';
+            }
+            render();
+        }
+
+        function renderNav() {
+            const firstName = currentProfile?.full_name?.split(' ')[0] || currentProfile?.email?.split('@')[0] || 'Usuario';
+            const isAdmin = currentProfile?.role === 'admin';
+            
+            return `
+                <nav class="bg-white shadow-md border-b-4 border-primary">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div class="flex justify-between items-center h-16">
+                            <button onclick="goToHome()" class="text-2xl font-bold text-primary hover:text-secondary transition">
+                                Academia de Agentes
+                            </button>
+                            <div class="flex items-center gap-4">
+                                ${currentView !== 'admin' ? `
+                                    <span class="text-gray-700">Hola, <strong>${firstName}</strong></span>
+                                ` : `
+                                    <span class="text-gray-700">${currentProfile?.email}</span>
+                                `}
+                                ${isAdmin ? `
+                                    <span class="px-3 py-1 bg-highlight text-primary rounded-full text-sm font-medium">Admin</span>
+                                    ${viewAsAgent ? `
+                                        <button onclick="toggleViewAsAgent()" class="px-4 py-2 bg-secondary text-white rounded-lg hover:bg-primary transition text-sm">
+                                            Volver a Admin
+                                        </button>
+                                    ` : ''}
+                                ` : `
+                                    <span class="px-3 py-1 bg-accent text-primary rounded-full text-sm font-medium">Agente</span>
+                                `}
+                                <button onclick="handleLogout()" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition">
+                                    Cerrar Sesión
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+            `;
         }
 
         function render() {
@@ -125,47 +181,34 @@
             
             if (!currentUser) {
                 app.innerHTML = renderLogin();
-            } else if (currentView === 'niche-selection') {
-                app.innerHTML = renderNicheSelection();
-            } else if (currentView === 'admin') {
-                app.innerHTML = renderAdmin();
-            } else if (currentView === 'dashboard') {
-                app.innerHTML = renderDashboard();
-            } else if (currentView === 'welcome') {
-                app.innerHTML = renderWelcome();
+            } else {
+                let content = '';
+                if (currentView === 'welcome') content = renderWelcome();
+                else if (currentView === 'niche-selection') content = renderNicheSelection();
+                else if (currentView === 'dashboard') content = renderDashboard();
+                else if (currentView === 'admin') content = renderAdmin();
+                
+                app.innerHTML = renderNav() + content;
             }
         }
 
         function renderLogin() {
             return `
                 <div class="min-h-screen flex items-center justify-center p-4">
-                    <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-                        <h2 class="text-3xl font-bold text-center text-indigo-600 mb-6">Academia de Agentes</h2>
+                    <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md border-t-4 border-primary">
+                        <h2 class="text-3xl font-bold text-center text-primary mb-6">Academia de Agentes</h2>
                         <p class="text-center text-gray-600 mb-8">Plataforma de capacitación para agentes de viajes</p>
                         
                         <form onsubmit="handleLoginSubmit(event)" class="space-y-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                                <input 
-                                    type="email" 
-                                    id="email" 
-                                    required
-                                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                />
+                                <input type="email" id="email" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary" />
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Contraseña</label>
-                                <input 
-                                    type="password" 
-                                    id="password" 
-                                    required
-                                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                />
+                                <input type="password" id="password" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary" />
                             </div>
-                            <button 
-                                type="submit"
-                                class="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition"
-                            >
+                            <button type="submit" class="w-full bg-secondary text-white py-3 rounded-lg font-semibold hover:bg-primary transition">
                                 Iniciar Sesión
                             </button>
                         </form>
@@ -174,35 +217,37 @@
             `;
         }
 
+        function renderWelcome() {
+            const firstName = currentProfile?.full_name?.split(' ')[0] || currentProfile?.email?.split('@')[0] || 'Agente';
+            return `
+                <div class="max-w-6xl mx-auto p-6">
+                    <div class="bg-white rounded-2xl shadow-xl p-8 border-l-4 border-primary">
+                        <h2 class="text-3xl font-bold text-primary mb-4">¡Bienvenid@, ${firstName}!</h2>
+                        <p class="text-gray-600 mb-6">Completa estos videos de bienvenida para comenzar tu capacitación.</p>
+                        <div class="bg-blue-50 border-l-4 border-secondary p-4 mb-6">
+                            <p class="text-primary">📹 Los videos aparecerán aquí cuando el administrador los suba.</p>
+                        </div>
+                        <button onclick="completeWelcome()" class="px-6 py-3 bg-secondary text-white rounded-lg font-semibold hover:bg-primary transition">
+                            Continuar →
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
         function renderNicheSelection() {
+            const firstName = currentProfile?.full_name?.split(' ')[0] || currentProfile?.email?.split('@')[0] || 'Agente';
             const nichesHTML = NICHES.map(niche => `
-                <button 
-                    onclick="selectNiche('${niche.id}')"
-                    class="p-6 border-2 border-gray-300 rounded-xl text-left hover:border-indigo-500 hover:bg-indigo-50 transition"
-                >
-                    <h3 class="font-semibold text-lg">${niche.name}</h3>
+                <button onclick="selectNiche('${niche.id}')" 
+                    class="p-6 border-2 border-gray-300 rounded-xl text-left hover:border-secondary hover:bg-accent hover:bg-opacity-20 transition">
+                    <h3 class="font-semibold text-lg text-primary">${niche.name}</h3>
                 </button>
             `).join('');
 
-            const firstName = currentProfile?.full_name?.split(' ')[0] || 'Agente';
-
             return `
-                <nav class="bg-white shadow-md mb-6">
-                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div class="flex justify-between items-center h-16">
-                            <h1 class="text-2xl font-bold text-indigo-600">Academia de Agentes</h1>
-                            <div class="flex items-center gap-4">
-                                <span class="text-gray-700">${currentProfile?.email}</span>
-                                <button onclick="handleLogout()" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition">
-                                    Cerrar Sesión
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </nav>
                 <div class="max-w-4xl mx-auto p-6">
-                    <div class="bg-white rounded-2xl shadow-xl p-8">
-                        <h2 class="text-3xl font-bold text-indigo-600 mb-4">¡Hola, ${firstName}!</h2>
+                    <div class="bg-white rounded-2xl shadow-xl p-8 border-l-4 border-primary">
+                        <h2 class="text-3xl font-bold text-primary mb-4">¡Hola, ${firstName}!</h2>
                         <p class="text-gray-600 mb-8">Selecciona tu Nicho - Elige el nicho de viajes en el que te especializarás.</p>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             ${nichesHTML}
@@ -212,60 +257,18 @@
             `;
         }
 
-        function renderWelcome() {
-            const firstName = currentProfile?.full_name?.split(' ')[0] || 'Agente';
-            return `
-                <nav class="bg-white shadow-md mb-6">
-                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div class="flex justify-between items-center h-16">
-                            <h1 class="text-2xl font-bold text-indigo-600">Academia de Agentes</h1>
-                            <div class="flex items-center gap-4">
-                                <span class="text-gray-700">${currentProfile?.email}</span>
-                                <button onclick="handleLogout()" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition">
-                                    Cerrar Sesión
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </nav>
-                <div class="max-w-6xl mx-auto p-6">
-                    <div class="bg-white rounded-2xl shadow-xl p-8">
-                        <h2 class="text-3xl font-bold text-indigo-600 mb-4">¡Bienvenid@, ${firstName}!</h2>
-                        <p class="text-gray-600 mb-6">Completa los videos de bienvenida para comenzar tu capacitación.</p>
-                        <div id="welcome-videos-container">
-                            <p class="text-gray-500">Cargando videos...</p>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
         function renderDashboard() {
             const niche = NICHES.find(n => n.id === currentProfile.niche_id);
-            const firstName = currentProfile?.full_name?.split(' ')[0] || 'Agente';
+            const firstName = currentProfile?.full_name?.split(' ')[0] || currentProfile?.email?.split('@')[0] || 'Agente';
             
             return `
-                <nav class="bg-white shadow-md mb-6">
-                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div class="flex justify-between items-center h-16">
-                            <h1 class="text-2xl font-bold text-indigo-600">Academia de Agentes</h1>
-                            <div class="flex items-center gap-4">
-                                <span class="text-gray-700">${currentProfile?.email}</span>
-                                <span class="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-sm font-medium">Agente</span>
-                                <button onclick="handleLogout()" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition">
-                                    Cerrar Sesión
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </nav>
                 <div class="max-w-7xl mx-auto p-6">
-                    <div class="bg-white rounded-2xl shadow-xl p-8 mb-6">
-                        <h2 class="text-2xl font-bold mb-4">¡Hola, ${firstName}!</h2>
-                        <h3 class="text-xl text-indigo-600 mb-4">Mi Nicho: ${niche?.name}</h3>
-                        <p class="text-gray-600 mb-4">Tus videos de capacitación aparecerán aquí una vez que el administrador los suba.</p>
-                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                            <p class="text-blue-800">📹 El administrador debe agregar videos desde el panel de administración.</p>
+                    <div class="bg-white rounded-2xl shadow-xl p-8 mb-6 border-l-4 border-primary">
+                        <h2 class="text-2xl font-bold text-primary mb-4">¡Hola, ${firstName}!</h2>
+                        <h3 class="text-xl text-secondary mb-4">Mi Nicho: ${niche?.name}</h3>
+                        <p class="text-gray-600 mb-4">Tus videos de capacitación aparecerán aquí.</p>
+                        <div class="bg-blue-50 border-l-4 border-secondary p-4">
+                            <p class="text-primary">📹 El administrador debe agregar videos desde el panel de administración.</p>
                         </div>
                     </div>
                 </div>
@@ -274,33 +277,23 @@
 
         function renderAdmin() {
             return `
-                <nav class="bg-white shadow-md mb-6">
-                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div class="flex justify-between items-center h-16">
-                            <h1 class="text-2xl font-bold text-indigo-600">Academia de Agentes</h1>
-                            <div class="flex items-center gap-4">
-                                <span class="text-gray-700">${currentProfile?.email}</span>
-                                <span class="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-medium">Admin</span>
-                                <button onclick="handleLogout()" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition">
-                                    Cerrar Sesión
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </nav>
                 <div class="max-w-7xl mx-auto p-6">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                        <button onclick="showAdminView('users')" class="p-6 bg-white rounded-xl shadow-lg hover:shadow-xl transition">
-                            <h3 class="text-xl font-bold text-indigo-600 mb-2">👥 Gestión de Usuarios</h3>
-                            <p class="text-gray-600">Ver y administrar todos los usuarios registrados</p>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                        <button onclick="showAdminView('users')" class="p-6 bg-white rounded-xl shadow-lg hover:shadow-xl transition border-t-4 border-primary">
+                            <h3 class="text-xl font-bold text-primary mb-2">👥 Gestión de Usuarios</h3>
+                            <p class="text-gray-600">Ver y administrar usuarios</p>
                         </button>
-                        <button onclick="showAdminView('videos')" class="p-6 bg-white rounded-xl shadow-lg hover:shadow-xl transition">
-                            <h3 class="text-xl font-bold text-indigo-600 mb-2">🎬 Gestión de Videos</h3>
-                            <p class="text-gray-600">Agregar y administrar videos de capacitación</p>
+                        <button onclick="showAdminView('videos')" class="p-6 bg-white rounded-xl shadow-lg hover:shadow-xl transition border-t-4 border-secondary">
+                            <h3 class="text-xl font-bold text-primary mb-2">🎬 Gestión de Videos</h3>
+                            <p class="text-gray-600">Agregar y administrar videos</p>
+                        </button>
+                        <button onclick="toggleViewAsAgent()" class="p-6 bg-white rounded-xl shadow-lg hover:shadow-xl transition border-t-4 border-highlight">
+                            <h3 class="text-xl font-bold text-primary mb-2">👁️ Ver como Agente</h3>
+                            <p class="text-gray-600">Previsualizar la experiencia</p>
                         </button>
                     </div>
-                    <div id="admin-content" class="bg-white rounded-2xl shadow-xl p-8">
-                        <h2 class="text-2xl font-bold text-gray-700 mb-4">Panel de Administración</h2>
+                    <div id="admin-content" class="bg-white rounded-2xl shadow-xl p-8 border-l-4 border-primary">
+                        <h2 class="text-2xl font-bold text-primary mb-4">Panel de Administración</h2>
                         <p class="text-gray-600">Selecciona una opción arriba para comenzar.</p>
                     </div>
                 </div>
@@ -309,147 +302,38 @@
 
         async function showAdminView(view) {
             const content = document.getElementById('admin-content');
-            
             if (view === 'users') {
-                try {
-                    const { data: users } = await supabaseClient
-                        .from('profiles')
-                        .select('*')
-                        .order('created_at', { ascending: false });
-                    
-                    const usersHTML = users ? users.map(user => {
-                        const niche = NICHES.find(n => n.id === user.niche_id);
-                        return `
-                            <tr class="border-b hover:bg-gray-50">
-                                <td class="p-4">${user.email}</td>
-                                <td class="p-4">
-                                    <span class="px-3 py-1 rounded-full text-sm font-medium ${user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}">
-                                        ${user.role}
-                                    </span>
-                                </td>
-                                <td class="p-4">${niche?.name || 'Sin asignar'}</td>
-                                <td class="p-4">${user.has_completed_welcome ? '✓ Completada' : '⏳ Pendiente'}</td>
-                                <td class="p-4 text-sm text-gray-500">${new Date(user.created_at).toLocaleDateString()}</td>
-                            </tr>
-                        `;
-                    }).join('') : '<tr><td colspan="5" class="p-4 text-center text-gray-500">No hay usuarios</td></tr>';
-
-                    content.innerHTML = `
-                        <h2 class="text-2xl font-bold mb-6">Gestión de Usuarios</h2>
-                        <div class="overflow-x-auto">
-                            <table class="w-full">
-                                <thead>
-                                    <tr class="border-b-2">
-                                        <th class="text-left p-4">Email</th>
-                                        <th class="text-left p-4">Rol</th>
-                                        <th class="text-left p-4">Nicho</th>
-                                        <th class="text-left p-4">Bienvenida</th>
-                                        <th class="text-left p-4">Fecha</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${usersHTML}
-                                </tbody>
-                            </table>
-                        </div>
+                const { data: users } = await supabaseClient.from('profiles').select('*').order('created_at', { ascending: false });
+                const usersHTML = users ? users.map(user => {
+                    const niche = NICHES.find(n => n.id === user.niche_id);
+                    return `
+                        <tr class="border-b hover:bg-gray-50">
+                            <td class="p-4">${user.email}</td>
+                            <td class="p-4"><span class="px-3 py-1 rounded-full text-sm font-medium ${user.role === 'admin' ? 'bg-highlight text-primary' : 'bg-accent text-primary'}">${user.role}</span></td>
+                            <td class="p-4">${niche?.name || 'Sin asignar'}</td>
+                            <td class="p-4">${user.has_completed_welcome ? '✓ Completada' : '⏳ Pendiente'}</td>
+                            <td class="p-4 text-sm text-gray-500">${new Date(user.created_at).toLocaleDateString()}</td>
+                        </tr>
                     `;
-                } catch (error) {
-                    console.error('Error loading users:', error);
-                    content.innerHTML = '<p class="text-red-600">Error al cargar usuarios</p>';
-                }
+                }).join('') : '';
+                content.innerHTML = `<h2 class="text-2xl font-bold mb-6 text-primary">Gestión de Usuarios</h2><table class="w-full"><thead><tr class="border-b-2"><th class="text-left p-4">Email</th><th class="text-left p-4">Rol</th><th class="text-left p-4">Nicho</th><th class="text-left p-4">Bienvenida</th><th class="text-left p-4">Fecha</th></tr></thead><tbody>${usersHTML}</tbody></table>`;
             } else if (view === 'videos') {
-                try {
-                    const { data: videos } = await supabaseClient
-                        .from('videos')
-                        .select('*')
-                        .order('order_index');
-
-                    const videosHTML = videos && videos.length > 0 ? videos.map(video => {
-                        const niche = NICHES.find(n => n.id === video.niche_id);
-                        return `
-                            <div class="border rounded-lg p-4 hover:bg-gray-50">
-                                <div class="flex justify-between items-start">
-                                    <div class="flex-1">
-                                        <h3 class="font-semibold text-lg">${video.title}</h3>
-                                        <p class="text-gray-600 text-sm mb-2">${video.description || 'Sin descripción'}</p>
-                                        <div class="flex gap-4 text-sm text-gray-500">
-                                            <span>Tipo: <span class="font-medium">${video.folder_type}</span></span>
-                                            ${video.niche_id ? `<span>Nicho: <span class="font-medium">${niche?.name}</span></span>` : ''}
-                                            <span>Orden: <span class="font-medium">${video.order_index}</span></span>
-                                            <span>ID: <span class="font-mono text-xs">${video.drive_file_id}</span></span>
-                                        </div>
-                                    </div>
-                                    <button onclick="deleteVideo('${video.id}')" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition text-sm">
-                                        Eliminar
-                                    </button>
-                                </div>
-                            </div>
-                        `;
-                    }).join('') : '<p class="text-gray-500">No hay videos agregados aún.</p>';
-
-                    const nichesOptions = NICHES.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
-
-                    content.innerHTML = `
-                        <h2 class="text-2xl font-bold mb-6">Agregar Nuevo Video</h2>
-                        <form onsubmit="handleAddVideo(event)" class="mb-8 space-y-4">
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Título</label>
-                                    <input type="text" id="video-title" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" />
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">ID del archivo de Drive</label>
-                                    <input type="text" id="video-drive-id" required placeholder="Ej: 1a2B3c4D5e6F7g8H9i0J" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" />
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Tipo de carpeta</label>
-                                    <select id="video-folder-type" onchange="toggleNicheField()" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
-                                        <option value="welcome">Bienvenida</option>
-                                        <option value="basics">Básico para empezar</option>
-                                        <option value="niche">Nicho específico</option>
-                                        <option value="general">General (todos)</option>
-                                    </select>
-                                </div>
-                                <div id="niche-field" style="display: none;">
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Nicho</label>
-                                    <select id="video-niche" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
-                                        <option value="">Seleccionar...</option>
-                                        ${nichesOptions}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Orden</label>
-                                    <input type="number" id="video-order" value="1" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" />
-                                </div>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Descripción</label>
-                                <textarea id="video-description" rows="3" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 resize-none"></textarea>
-                            </div>
-                            <button type="submit" class="px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition">
-                                Agregar Video
-                            </button>
-                        </form>
-
-                        <h2 class="text-2xl font-bold mb-6">Videos Existentes</h2>
-                        <div class="space-y-4">
-                            ${videosHTML}
-                        </div>
-                    `;
-                } catch (error) {
-                    console.error('Error loading videos:', error);
-                    content.innerHTML = '<p class="text-red-600">Error al cargar videos</p>';
-                }
+                const { data: videos } = await supabaseClient.from('videos').select('*').order('order_index');
+                const videosHTML = videos && videos.length > 0 ? videos.map(video => {
+                    const niche = NICHES.find(n => n.id === video.niche_id);
+                    return `<div class="border rounded-lg p-4 hover:bg-gray-50"><div class="flex justify-between"><div class="flex-1"><h3 class="font-semibold text-lg">${video.title}</h3><p class="text-sm text-gray-600">${video.description || ''}</p><div class="flex gap-4 text-sm text-gray-500 mt-2"><span>Tipo: ${video.folder_type}</span>${video.niche_id ? `<span>Nicho: ${niche?.name}</span>` : ''}<span>Orden: ${video.order_index}</span></div></div><button onclick="deleteVideo('${video.id}')" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">Eliminar</button></div></div>`;
+                }).join('') : '<p class="text-gray-500">No hay videos.</p>';
+                const nichesOpts = NICHES.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
+                content.innerHTML = `<h2 class="text-2xl font-bold mb-6 text-primary">Agregar Nuevo Video</h2><form onsubmit="handleAddVideo(event)" class="mb-8 space-y-4"><div class="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label class="block text-sm font-medium mb-2">Título</label><input type="text" id="video-title" required class="w-full px-4 py-2 border rounded-lg" /></div><div><label class="block text-sm font-medium mb-2">ID de Drive</label><input type="text" id="video-drive-id" required class="w-full px-4 py-2 border rounded-lg" /></div><div><label class="block text-sm font-medium mb-2">Tipo</label><select id="video-folder-type" onchange="toggleNicheField()" class="w-full px-4 py-2 border rounded-lg"><option value="welcome">Bienvenida</option><option value="basics">Básico</option><option value="niche">Nicho</option><option value="general">General</option></select></div><div id="niche-field" style="display:none;"><label class="block text-sm font-medium mb-2">Nicho</label><select id="video-niche" class="w-full px-4 py-2 border rounded-lg"><option value="">Seleccionar...</option>${nichesOpts}</select></div><div><label class="block text-sm font-medium mb-2">Orden</label><input type="number" id="video-order" value="1" class="w-full px-4 py-2 border rounded-lg" /></div></div><div><label class="block text-sm font-medium mb-2">Descripción</label><textarea id="video-description" rows="3" class="w-full px-4 py-2 border rounded-lg resize-none"></textarea></div><button type="submit" class="px-6 py-3 bg-secondary text-white rounded-lg font-semibold hover:bg-primary">Agregar Video</button></form><h2 class="text-2xl font-bold mb-6 text-primary">Videos Existentes</h2><div class="space-y-4">${videosHTML}</div>`;
             }
         }
 
-        window.toggleNicheField = function() {
-            const folderType = document.getElementById('video-folder-type').value;
+        window.toggleNicheField = () => {
             const nicheField = document.getElementById('niche-field');
-            nicheField.style.display = folderType === 'niche' ? 'block' : 'none';
+            nicheField.style.display = document.getElementById('video-folder-type').value === 'niche' ? 'block' : 'none';
         };
 
-        window.handleAddVideo = async function(e) {
+        window.handleAddVideo = async (e) => {
             e.preventDefault();
             const video = {
                 title: document.getElementById('video-title').value,
@@ -459,66 +343,55 @@
                 order_index: parseInt(document.getElementById('video-order').value),
                 niche_id: document.getElementById('video-niche')?.value || null
             };
-
             try {
                 const { error } = await supabaseClient.from('videos').insert(video);
                 if (error) throw error;
-                alert('Video agregado exitosamente');
+                alert('Video agregado');
                 showAdminView('videos');
             } catch (error) {
-                console.error('Error adding video:', error);
                 alert('Error: ' + error.message);
             }
         };
 
-        window.deleteVideo = async function(id) {
-            if (!confirm('¿Estás seguro de eliminar este video?')) return;
+        window.deleteVideo = async (id) => {
+            if (!confirm('¿Eliminar video?')) return;
             try {
-                const { error } = await supabaseClient.from('videos').delete().eq('id', id);
-                if (error) throw error;
+                await supabaseClient.from('videos').delete().eq('id', id);
                 alert('Video eliminado');
                 showAdminView('videos');
             } catch (error) {
-                console.error('Error deleting video:', error);
-                alert('Error al eliminar video');
+                alert('Error al eliminar');
             }
         };
 
-        window.handleLoginSubmit = function(e) {
+        window.handleLoginSubmit = (e) => {
             e.preventDefault();
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            
-            const button = e.target.querySelector('button[type="submit"]');
-            button.textContent = 'Iniciando sesión...';
-            button.disabled = true;
-            
-            handleLogin(email, password).finally(() => {
-                button.textContent = 'Iniciar Sesión';
-                button.disabled = false;
-            });
+            handleLogin(document.getElementById('email').value, document.getElementById('password').value);
         };
 
         window.handleLogout = handleLogout;
-        
-        window.selectNiche = function(nicheId) {
-            updateNiche(nicheId);
-        };
-
-        window.completeWelcome = async function() {
+        window.goToHome = goToHome;
+        window.toggleViewAsAgent = toggleViewAsAgent;
+        window.selectNiche = async (nicheId) => {
             try {
-                await supabaseClient
-                    .from('profiles')
-                    .update({ has_completed_welcome: true })
-                    .eq('id', currentProfile.id);
+                await supabaseClient.from('profiles').update({ niche_id: nicheId }).eq('id', currentProfile.id);
+                currentProfile.niche_id = nicheId;
+                currentView = 'dashboard';
+                render();
+            } catch (error) {
+                alert('Error al actualizar nicho');
+            }
+        };
+        window.completeWelcome = async () => {
+            try {
+                await supabaseClient.from('profiles').update({ has_completed_welcome: true }).eq('id', currentProfile.id);
                 currentProfile.has_completed_welcome = true;
                 currentView = 'niche-selection';
                 render();
             } catch (error) {
-                console.error('Error completing welcome:', error);
+                alert('Error');
             }
         };
-
         window.showAdminView = showAdminView;
 
         init();
