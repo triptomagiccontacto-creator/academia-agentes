@@ -224,16 +224,164 @@
                     <div class="bg-white rounded-2xl shadow-xl p-8 border-l-4 border-primary">
                         <h2 class="text-3xl font-bold text-primary mb-4">¡Bienvenid@, ${firstName}!</h2>
                         <p class="text-gray-600 mb-6">Completa estos videos de bienvenida para comenzar tu capacitación.</p>
+                        <div id="welcome-videos-container">
+                            <p class="text-gray-500">Cargando videos...</p>
+                        </div>
+                    </div>
+                </div>
+                <script>loadWelcomeVideos();</script>
+            `;
+        }
+
+        async function loadWelcomeVideos() {
+            const container = document.getElementById('welcome-videos-container');
+            if (!container) return;
+            
+            try {
+                const { data: videos, error } = await supabaseClient
+                    .from('videos')
+                    .select('*')
+                    .eq('folder_type', 'welcome')
+                    .order('order_index');
+                
+                if (error) throw error;
+                
+                if (!videos || videos.length === 0) {
+                    container.innerHTML = `
                         <div class="bg-blue-50 border-l-4 border-secondary p-4 mb-6">
                             <p class="text-primary">📹 Los videos aparecerán aquí cuando el administrador los suba.</p>
                         </div>
                         <button onclick="completeWelcome()" class="px-6 py-3 bg-secondary text-white rounded-lg font-semibold hover:bg-primary transition">
-                            Continuar →
+                            Continuar de todas formas →
                         </button>
+                    `;
+                    return;
+                }
+
+                const { data: progressData } = await supabaseClient
+                    .from('video_progress')
+                    .select('*')
+                    .eq('user_id', currentProfile.id);
+                
+                const progressMap = {};
+                if (progressData) {
+                    progressData.forEach(p => progressMap[p.video_id] = p);
+                }
+
+                let currentVideoIndex = 0;
+                for (let i = 0; i < videos.length; i++) {
+                    if (!progressMap[videos[i].id]?.completed) {
+                        currentVideoIndex = i;
+                        break;
+                    }
+                    if (i === videos.length - 1) currentVideoIndex = i;
+                }
+
+                const currentVideo = videos[currentVideoIndex];
+                const allCompleted = videos.every(v => progressMap[v.id]?.completed);
+
+                const videosListHTML = videos.map((video, index) => {
+                    const isLocked = index > 0 && !progressMap[videos[index - 1].id]?.completed;
+                    const isCompleted = progressMap[video.id]?.completed;
+                    const isCurrent = currentVideo.id === video.id;
+                    
+                    return `
+                        <button
+                            onclick="${!isLocked ? `selectWelcomeVideo('${video.id}')` : ''}"
+                            class="p-4 border-2 rounded-lg text-left transition ${
+                                isCurrent ? 'border-secondary bg-accent bg-opacity-20' :
+                                isCompleted ? 'border-green-500 bg-green-50' :
+                                isLocked ? 'border-gray-300 bg-gray-100 opacity-50 cursor-not-allowed' :
+                                'border-gray-300 hover:border-secondary'
+                            }"
+                            ${isLocked ? 'disabled' : ''}
+                        >
+                            <div class="flex items-center justify-between">
+                                <span class="font-medium">${video.title}</span>
+                                ${isCompleted ? '<span class="text-green-500 text-xl">✓</span>' : 
+                                  isLocked ? '<span class="text-gray-400 text-xl">🔒</span>' : ''}
+                            </div>
+                        </button>
+                    `;
+                }).join('');
+
+                container.innerHTML = `
+                    <div class="mb-6">
+                        <div class="aspect-video bg-gray-900 rounded-lg mb-4 overflow-hidden">
+                            <iframe
+                                src="https://drive.google.com/file/d/${currentVideo.drive_file_id}/preview"
+                                class="w-full h-full"
+                                style="width: 100%; height: 100%; border: none;"
+                                allow="autoplay"
+                            ></iframe>
+                        </div>
+                        <h3 class="text-xl font-semibold text-primary mb-2">${currentVideo.title}</h3>
+                        <p class="text-gray-600 mb-4">${currentVideo.description || ''}</p>
+                        
+                        ${!progressMap[currentVideo.id]?.completed ? `
+                            <button
+                                onclick="markWelcomeVideoComplete('${currentVideo.id}')"
+                                class="px-6 py-3 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition"
+                            >
+                                ✓ Marcar como completado
+                            </button>
+                        ` : ''}
                     </div>
-                </div>
-            `;
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        ${videosListHTML}
+                    </div>
+
+                    ${allCompleted ? `
+                        <button
+                            onclick="completeWelcome()"
+                            class="w-full px-6 py-4 bg-secondary text-white rounded-lg font-semibold text-lg hover:bg-primary transition"
+                        >
+                            Continuar a selección de nicho →
+                        </button>
+                    ` : ''}
+                `;
+                
+                window.currentWelcomeVideos = videos;
+                window.currentWelcomeProgress = progressMap;
+            } catch (error) {
+                console.error('Error loading welcome videos:', error);
+                container.innerHTML = `
+                    <div class="bg-red-50 border-l-4 border-red-500 p-4 mb-6">
+                        <p class="text-red-800">Error al cargar videos. Por favor recarga la página.</p>
+                    </div>
+                `;
+            }
         }
+
+        window.selectWelcomeVideo = async function(videoId) {
+            const videos = window.currentWelcomeVideos;
+            if (!videos) return;
+            
+            const video = videos.find(v => v.id === videoId);
+            if (!video) return;
+            
+            await loadWelcomeVideos();
+        };
+
+        window.markWelcomeVideoComplete = async function(videoId) {
+            try {
+                const { error } = await supabaseClient
+                    .from('video_progress')
+                    .upsert({
+                        user_id: currentProfile.id,
+                        video_id: videoId,
+                        progress_percent: 100,
+                        completed: true
+                    });
+                
+                if (error) throw error;
+                await loadWelcomeVideos();
+            } catch (error) {
+                console.error('Error marking video as complete:', error);
+                alert('Error al marcar video como completado');
+            }
+        };
 
         function renderNicheSelection() {
             const firstName = currentProfile?.full_name?.split(' ')[0] || currentProfile?.email?.split('@')[0] || 'Agente';
