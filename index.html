@@ -192,6 +192,8 @@
                 </button>
             `).join('');
 
+            const firstName = currentProfile?.full_name?.split(' ')[0] || 'Agente';
+
             return `
                 <nav class="bg-white shadow-md mb-6">
                     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -208,8 +210,8 @@
                 </nav>
                 <div class="max-w-4xl mx-auto p-6">
                     <div class="bg-white rounded-2xl shadow-xl p-8">
-                        <h2 class="text-3xl font-bold text-indigo-600 mb-4">Selecciona tu Nicho</h2>
-                        <p class="text-gray-600 mb-8">Elige el nicho de viajes en el que te especializarás.</p>
+                        <h2 class="text-3xl font-bold text-indigo-600 mb-4">¡Hola, ${firstName}!</h2>
+                        <p class="text-gray-600 mb-8">Selecciona tu Nicho - Elige el nicho de viajes en el que te especializarás.</p>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             ${nichesHTML}
                         </div>
@@ -219,31 +221,147 @@
         }
 
         function renderWelcome() {
+            const firstName = currentProfile?.full_name?.split(' ')[0] || 'Agente';
             return `
                 <nav class="bg-white shadow-md mb-6">
                     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                         <div class="flex justify-between items-center h-16">
                             <h1 class="text-2xl font-bold text-indigo-600">Academia de Agentes</h1>
-                            <button onclick="handleLogout()" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition">
-                                Cerrar Sesión
-                            </button>
+                            <div class="flex items-center gap-4">
+                                <span class="text-gray-700">${currentProfile?.email}</span>
+                                <button onclick="handleLogout()" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition">
+                                    Cerrar Sesión
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </nav>
                 <div class="max-w-6xl mx-auto p-6">
                     <div class="bg-white rounded-2xl shadow-xl p-8">
-                        <h2 class="text-3xl font-bold text-indigo-600 mb-4">¡Bienvenido!</h2>
-                        <p class="text-gray-600 mb-6">Por favor, sube videos de bienvenida desde el panel de administrador para que los agentes puedan verlos.</p>
-                        <button 
-                            onclick="completeWelcome()"
-                            class="px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition"
-                        >
-                            Continuar a selección de nicho →
-                        </button>
+                        <h2 class="text-3xl font-bold text-indigo-600 mb-4">¡Bienvenid@, ${firstName}!</h2>
+                        <p class="text-gray-600 mb-6">Completa estos videos de bienvenida para comenzar tu capacitación.</p>
+                        <div id="welcome-videos" class="mb-6">
+                            <p class="text-gray-500">Cargando videos...</p>
+                        </div>
                     </div>
                 </div>
+                <script>loadWelcomeVideos();</script>
             `;
         }
+
+        async function loadWelcomeVideos() {
+            const container = document.getElementById('welcome-videos');
+            const { data: videos, error } = await supabaseClient
+                .from('videos')
+                .select('*')
+                .eq('folder_type', 'welcome')
+                .order('order_index');
+            
+            if (error || !videos || videos.length === 0) {
+                container.innerHTML = '<p class="text-gray-600">Por favor, espera a que el administrador suba videos de bienvenida.</p>';
+                return;
+            }
+
+            const { data: progressData } = await supabaseClient
+                .from('video_progress')
+                .select('*')
+                .eq('user_id', currentProfile.id);
+            
+            const progressMap = {};
+            if (progressData) {
+                progressData.forEach(p => {
+                    progressMap[p.video_id] = p;
+                });
+            }
+
+            let currentVideoIndex = 0;
+            for (let i = 0; i < videos.length; i++) {
+                if (!progressMap[videos[i].id]?.completed) {
+                    currentVideoIndex = i;
+                    break;
+                }
+                if (i === videos.length - 1) {
+                    currentVideoIndex = i;
+                }
+            }
+
+            const currentVideo = videos[currentVideoIndex];
+            const allCompleted = videos.every(v => progressMap[v.id]?.completed);
+
+            container.innerHTML = `
+                <div class="aspect-video bg-gray-900 rounded-lg mb-4 overflow-hidden">
+                    <iframe
+                        src="https://drive.google.com/file/d/${currentVideo.drive_file_id}/preview"
+                        className="w-full h-full"
+                        allow="autoplay"
+                        style="width: 100%; height: 100%; border: none;"
+                    ></iframe>
+                </div>
+                <h3 class="text-xl font-semibold mb-2">${currentVideo.title}</h3>
+                <p class="text-gray-600 mb-4">${currentVideo.description || ''}</p>
+                
+                ${!progressMap[currentVideo.id]?.completed ? `
+                    <button
+                        onclick="markWelcomeVideoComplete('${currentVideo.id}')"
+                        class="px-6 py-3 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition"
+                    >
+                        Marcar como completado
+                    </button>
+                ` : ''}
+
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    ${videos.map((video, index) => `
+                        <div
+                            onclick="selectWelcomeVideo(${index}, ${JSON.stringify(video.id)}, ${progressMap[video.id]?.completed || false})"
+                            class="p-4 border-2 rounded-lg cursor-pointer transition ${
+                                currentVideo.id === video.id
+                                    ? 'border-indigo-500 bg-indigo-50'
+                                    : progressMap[video.id]?.completed
+                                    ? 'border-green-500 bg-green-50'
+                                    : 'border-gray-300 hover:border-indigo-300'
+                            }"
+                        >
+                            <div class="flex items-center justify-between">
+                                <span class="font-medium">${video.title}</span>
+                                ${progressMap[video.id]?.completed ? '<span class="text-green-500 text-xl">✓</span>' : ''}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+
+                ${allCompleted ? `
+                    <button
+                        onclick="completeWelcome()"
+                        class="mt-6 w-full px-6 py-4 bg-indigo-600 text-white rounded-lg font-semibold text-lg hover:bg-indigo-700 transition"
+                    >
+                        Continuar a selección de nicho →
+                    </button>
+                ` : ''}
+            `;
+        }
+
+        window.loadWelcomeVideos = loadWelcomeVideos;
+
+        window.selectWelcomeVideo = async function(index, videoId, completed) {
+            if (index === 0 || completed) {
+                await loadWelcomeVideos();
+            }
+        };
+
+        window.markWelcomeVideoComplete = async function(videoId) {
+            const { error } = await supabaseClient
+                .from('video_progress')
+                .upsert({
+                    user_id: currentProfile.id,
+                    video_id: videoId,
+                    progress_percent: 100,
+                    completed: true
+                });
+            
+            if (!error) {
+                await loadWelcomeVideos();
+            }
+        };
 
         function renderDashboard() {
             const niche = NICHES.find(n => n.id === currentProfile.niche_id);
