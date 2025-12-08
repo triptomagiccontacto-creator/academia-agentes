@@ -219,17 +219,22 @@
 
         function renderWelcome() {
             const firstName = currentProfile?.full_name?.split(' ')[0] || currentProfile?.email?.split('@')[0] || 'Agente';
+            
+            // Cargar videos inmediatamente después de renderizar
+            setTimeout(() => loadWelcomeVideos(), 100);
+            
             return `
                 <div class="max-w-6xl mx-auto p-6">
                     <div class="bg-white rounded-2xl shadow-xl p-8 border-l-4 border-primary">
                         <h2 class="text-3xl font-bold text-primary mb-4">¡Bienvenid@, ${firstName}!</h2>
                         <p class="text-gray-600 mb-6">Completa estos videos de bienvenida para comenzar tu capacitación.</p>
                         <div id="welcome-videos-container">
-                            <p class="text-gray-500">Cargando videos...</p>
+                            <div class="flex items-center justify-center p-8">
+                                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <script>loadWelcomeVideos();</script>
             `;
         }
 
